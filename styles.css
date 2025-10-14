@@ -292,6 +292,64 @@ body {
     color: #2d3748;
 }
 
+.voice-effects {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f7fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.voice-effects h4 {
+    margin-bottom: 15px;
+    color: #2d3748;
+    font-size: 1.1rem;
+}
+
+.effect-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+}
+
+.effect-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.effect-option:hover {
+    border-color: #cbd5e0;
+    background: #f7fafc;
+}
+
+.effect-option input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #667eea;
+}
+
+.effect-option input[type="radio"]:checked + span {
+    color: #667eea;
+    font-weight: 500;
+}
+
+.effect-option:has(input[type="radio"]:checked) {
+    border-color: #667eea;
+    background: #e6f3ff;
+}
+
+.effect-option span {
+    font-size: 0.9rem;
+    color: #4a5568;
+}
+
 .recording-controls {
     display: flex;
     flex-direction: column;

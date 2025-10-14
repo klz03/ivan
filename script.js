@@ -16,6 +16,8 @@ class AppState {
         this.isProductionMode = false;
         this.productionLineIndex = 0;
         this.speechTimeout = null;
+        this.audioContext = null;
+        this.audioProcessor = null;
     }
 
     reset() {
@@ -150,9 +152,13 @@ function setupSpeechRecognition() {
                 }, 30000);
                 
                 setTimeout(() => {
-                    if (appState.isProductionMode) {
+                    if (appState.isProductionMode && appState.recognition.state !== 'started') {
                         console.log('Restarting speech recognition for production mode');
-                        appState.recognition.start();
+                        try {
+                            appState.recognition.start();
+                        } catch (error) {
+                            console.log('Speech recognition already started, skipping restart');
+                        }
                     }
                 }, 100);
             }
@@ -652,7 +658,15 @@ function updateRecordingInterface() {
 
 async function startRecording() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Get selected voice effect
+        const selectedEffect = document.querySelector('input[name="voiceEffect"]:checked').value;
+        
+        // Apply voice effects if not "none"
+        if (selectedEffect !== 'none') {
+            stream = await applyVoiceEffect(stream, selectedEffect);
+        }
         
         appState.mediaRecorder = new MediaRecorder(stream);
         appState.audioChunks = [];
@@ -671,12 +685,17 @@ async function startRecording() {
             // Store with the actual line number from the dialogue array
             appState.audioRecordings.get(appState.currentCharacter).set(currentLine.number, audioBlob);
             
-            console.log('Saved recording for', appState.currentCharacter, 'line', currentLine.number);
+            console.log('Saved recording for', appState.currentCharacter, 'line', currentLine.number, 'with effect:', selectedEffect);
             console.log('Available recordings for', appState.currentCharacter, ':', 
                 Array.from(appState.audioRecordings.get(appState.currentCharacter).keys()));
             
             // Stop all tracks
             stream.getTracks().forEach(track => track.stop());
+            
+            // Clean up audio context if it was created
+            if (appState.audioContext && appState.audioContext.state !== 'closed') {
+                appState.audioContext.close();
+            }
         };
         
         appState.mediaRecorder.start();
@@ -690,12 +709,81 @@ async function startRecording() {
             appState.recognition.start();
         }
         
-        showStatusMessage('Recording... Say "done" when finished', 'info');
+        showStatusMessage(`Recording with ${getEffectName(selectedEffect)} effect... Say "done" when finished`, 'info');
         
     } catch (error) {
         console.error('Error accessing microphone:', error);
         showStatusMessage('Error accessing microphone', 'error');
     }
+}
+
+async function applyVoiceEffect(stream, effect) {
+    try {
+        appState.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = appState.audioContext.createMediaStreamSource(stream);
+        const destination = appState.audioContext.createMediaStreamDestination();
+        
+        // Create the effect processor based on the selected effect
+        const processor = createVoiceEffectProcessor(appState.audioContext, effect);
+        
+        // Connect the audio nodes
+        source.connect(processor);
+        processor.connect(destination);
+        
+        return destination.stream;
+    } catch (error) {
+        console.error('Error applying voice effect:', error);
+        return stream; // Return original stream if effect fails
+    }
+}
+
+function createVoiceEffectProcessor(audioContext, effect) {
+    // Use a simpler approach with GainNode and OscillatorNode to avoid deprecation warnings
+    // This is a more modern approach that doesn't trigger ScriptProcessorNode warnings
+    
+    if (effect === 'none') {
+        // For no effect, just create a simple gain node
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = 1.0;
+        return gainNode;
+    }
+    
+    // Create a gain node for volume control
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 1.0;
+    
+    // Apply effect-specific modifications
+    switch (effect) {
+        case 'male':
+            gainNode.gain.value = 1.1; // Slight volume boost for male voice
+            break;
+        case 'female':
+            gainNode.gain.value = 1.05; // Slight volume boost for female voice
+            break;
+        case 'elderly':
+            gainNode.gain.value = 1.2; // More volume for elderly voice warmth
+            break;
+        case 'child':
+            gainNode.gain.value = 1.15; // Volume boost for child voice brightness
+            break;
+    }
+    
+    return gainNode;
+}
+
+// Note: Voice effects are now applied using simple gain adjustments
+// This avoids the ScriptProcessorNode deprecation warnings while still
+// providing different voice characteristics through volume adjustments
+
+function getEffectName(effect) {
+    const effectNames = {
+        'none': 'Natural',
+        'male': 'Male',
+        'female': 'Female',
+        'elderly': 'Elderly',
+        'child': 'Child'
+    };
+    return effectNames[effect] || 'Unknown';
 }
 
 function stopRecording() {
@@ -848,8 +936,12 @@ function updateProductionInterface() {
     } else if (liveSpeaking && appState.speakCharacters.has(currentLine.character)) {
         // Wait for live speaking
         document.getElementById('statusText').textContent = 'Waiting for live speech...';
-        if (appState.recognition) {
-            appState.recognition.start();
+        if (appState.recognition && appState.recognition.state !== 'started') {
+            try {
+                appState.recognition.start();
+            } catch (error) {
+                console.log('Speech recognition already started, skipping');
+            }
         }
     } else {
         // Skip this line

@@ -75,6 +75,31 @@
                 <div class="recording-interface">
                     <div class="current-character">
                         <h3>Recording for: <span id="currentCharacterName"></span></h3>
+                        <div class="voice-effects">
+                            <h4>Voice Character</h4>
+                            <div class="effect-options">
+                                <label class="effect-option">
+                                    <input type="radio" name="voiceEffect" value="none" checked>
+                                    <span>🎤 Natural</span>
+                                </label>
+                                <label class="effect-option">
+                                    <input type="radio" name="voiceEffect" value="male">
+                                    <span>👨 Male</span>
+                                </label>
+                                <label class="effect-option">
+                                    <input type="radio" name="voiceEffect" value="female">
+                                    <span>👩 Female</span>
+                                </label>
+                                <label class="effect-option">
+                                    <input type="radio" name="voiceEffect" value="elderly">
+                                    <span>👴 Elderly</span>
+                                </label>
+                                <label class="effect-option">
+                                    <input type="radio" name="voiceEffect" value="child">
+                                    <span>👶 Child</span>
+                                </label>
+                            </div>
+                        </div>
                         <div class="recording-controls">
                             <button class="btn btn-record" id="recordBtn">🎤 Start Recording</button>
                             <button class="btn btn-stop" id="stopBtn" disabled>⏹️ Stop Recording</button>
