@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Script Teleprompter & Voice Recorder</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>Script Teleprompter & Voice Recorder</h1>
+            <p>Upload your script, record character voices, and create professional audio productions</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Step 1: PDF Upload -->
+            <section id="upload-section" class="step-section active">
+                <div class="step-header">
+                    <h2>Step 1: Upload Script</h2>
+                    <div class="step-number">1</div>
+                </div>
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14,2 14,8 20,8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10,9 9,9 8,9"/>
+                        </svg>
+                        <h3>Upload Your Script</h3>
+                        <p>Drag and drop your script file here or click to browse</p>
+                        <p class="file-types">Supported formats: .txt, .fountain</p>
+                        <input type="file" id="scriptInput" accept=".txt,.fountain" hidden>
+                        <button class="upload-btn" onclick="document.getElementById('scriptInput').click()">Choose File</button>
+                    </div>
+                </div>
+                <div id="scriptInfo" class="script-info hidden">
+                    <h4>Script Uploaded Successfully</h4>
+                    <p id="scriptFileName"></p>
+                    <button class="btn btn-primary" id="processScriptBtn">Process Script</button>
+                </div>
+            </section>
+
+            <!-- Step 2: Character Selection -->
+            <section id="character-section" class="step-section">
+                <div class="step-header">
+                    <h2>Step 2: Character Setup</h2>
+                    <div class="step-number">2</div>
+                </div>
+                <div class="character-setup">
+                    <div class="character-group">
+                        <h3>Characters to Record (with voice effects)</h3>
+                        <div id="recordCharacters" class="character-list"></div>
+                    </div>
+                    <div class="character-group">
+                        <h3>Characters to Speak Live</h3>
+                        <div id="speakCharacters" class="character-list"></div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="startRecordingBtn" disabled>Start Recording Session</button>
+            </section>
+
+            <!-- Step 3: Recording Interface -->
+            <section id="recording-section" class="step-section">
+                <div class="step-header">
+                    <h2>Step 3: Record Character Voices</h2>
+                    <div class="step-number">3</div>
+                </div>
+                <div class="recording-interface">
+                    <div class="current-character">
+                        <h3>Recording for: <span id="currentCharacterName"></span></h3>
+                        <div class="recording-controls">
+                            <button class="btn btn-record" id="recordBtn">🎤 Start Recording</button>
+                            <button class="btn btn-stop" id="stopBtn" disabled>⏹️ Stop Recording</button>
+                            <button class="btn btn-rerecord" id="rerecordBtn">🔄 Rerecord Line</button>
+                            <button class="btn btn-skip" id="skipBtn">⏭️ Skip Line</button>
+                        </div>
+                    </div>
+                    <div class="teleprompter">
+                        <div class="teleprompter-header">
+                            <h4>Current Line: <span id="currentLineNumber"></span></h4>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                        </div>
+                        <div class="teleprompter-text" id="teleprompterText"></div>
+                        <div class="teleprompter-controls">
+                            <button class="btn btn-secondary" id="prevLineBtn">← Previous</button>
+                            <button class="btn btn-secondary" id="nextLineBtn">Next →</button>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="finishRecordingBtn">Finish Recording Session</button>
+            </section>
+
+            <!-- Step 4: Auto-Advance Mode -->
+            <section id="playback-section" class="step-section">
+                <div class="step-header">
+                    <h2>Step 4: Auto-Advance Production</h2>
+                    <div class="step-number">4</div>
+                </div>
+                <div class="playback-interface">
+                    <div class="mode-selector">
+                        <h3>Production Mode</h3>
+                        <div class="mode-options">
+                            <label class="mode-option">
+                                <input type="checkbox" id="playRecordings" checked>
+                                <span>Play Recorded Audio</span>
+                            </label>
+                            <label class="mode-option">
+                                <input type="checkbox" id="liveSpeaking" checked>
+                                <span>Live Speaking</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="production-controls">
+                        <button class="btn btn-primary" id="startProductionBtn">🎬 Start Production</button>
+                        <button class="btn btn-secondary" id="pauseProductionBtn" disabled>⏸️ Pause</button>
+                        <button class="btn btn-secondary" id="stopProductionBtn" disabled>⏹️ Stop</button>
+                    </div>
+                    <div class="production-teleprompter">
+                        <div class="teleprompter-header">
+                            <h4>Production Mode - Line: <span id="productionLineNumber"></span></h4>
+                            <div class="status-indicator">
+                                <span id="statusText">Ready to start</span>
+                            </div>
+                        </div>
+                        <div class="teleprompter-text" id="productionTeleprompterText"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Audio Visualizer -->
+        <div class="audio-visualizer" id="audioVisualizer">
+            <canvas id="visualizerCanvas"></canvas>
+        </div>
+
+        <!-- Status Messages -->
+        <div class="status-message" id="statusMessage"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="script.js"></script>
+</body>
+</html>
