@@ -968,18 +968,39 @@ function createPostProcessingEffect(audioContext, effect) {
     
     switch (effect) {
         case 'male':
-            // Lower pitch simulation with dramatic low-pass filter
-            const maleFilter = audioContext.createBiquadFilter();
-            maleFilter.type = 'lowpass';
-            maleFilter.frequency.value = 1800; // Much lower for deeper male voice
-            maleFilter.Q.value = 2;
+            // Advanced male voice with multiple processing stages
+            const maleHighPass = audioContext.createBiquadFilter();
+            maleHighPass.type = 'highpass';
+            maleHighPass.frequency.value = 50;
+            maleHighPass.Q.value = 1;
+            
+            const maleLowPass = audioContext.createBiquadFilter();
+            maleLowPass.type = 'lowpass';
+            maleLowPass.frequency.value = 800; // Very low for deep voice
+            maleLowPass.Q.value = 4;
+            
+            const maleFormant = audioContext.createBiquadFilter();
+            maleFormant.type = 'peaking';
+            maleFormant.frequency.value = 300; // Male formant frequency
+            maleFormant.Q.value = 3;
+            maleFormant.gain.value = 15; // Strong formant boost
+            
+            const maleCompressor = audioContext.createDynamicsCompressor();
+            maleCompressor.threshold.value = -20;
+            maleCompressor.knee.value = 40;
+            maleCompressor.ratio.value = 20;
+            maleCompressor.attack.value = 0.001;
+            maleCompressor.release.value = 0.1;
             
             inputGain.disconnect();
-            inputGain.connect(maleFilter);
-            maleFilter.connect(outputGain);
+            inputGain.connect(maleHighPass);
+            maleHighPass.connect(maleLowPass);
+            maleLowPass.connect(maleFormant);
+            maleFormant.connect(maleCompressor);
+            maleCompressor.connect(outputGain);
             
-            inputGain.gain.value = 1.4;
-            outputGain.gain.value = 0.7;
+            inputGain.gain.value = 3.0;
+            outputGain.gain.value = 0.3;
             break;
             
         case 'female':
@@ -1005,31 +1026,62 @@ function createPostProcessingEffect(audioContext, effect) {
             break;
             
         case 'elderly-male':
-            // Simulate elderly voice with dramatic filtering
-            const elderlyMaleFilter1 = audioContext.createBiquadFilter();
-            elderlyMaleFilter1.type = 'lowpass';
-            elderlyMaleFilter1.frequency.value = 1500; // Much lower for deeper voice
-            elderlyMaleFilter1.Q.value = 2;
+            // Advanced elderly male voice with tremolo and formant shifting
+            const elderlyHighPass = audioContext.createBiquadFilter();
+            elderlyHighPass.type = 'highpass';
+            elderlyHighPass.frequency.value = 70;
+            elderlyHighPass.Q.value = 1;
             
-            const elderlyMaleFilter2 = audioContext.createBiquadFilter();
-            elderlyMaleFilter2.type = 'peaking';
-            elderlyMaleFilter2.frequency.value = 600; // Lower frequency for aged voice
-            elderlyMaleFilter2.Q.value = 3;
-            elderlyMaleFilter2.gain.value = 8; // Much stronger boost
+            const elderlyLowPass = audioContext.createBiquadFilter();
+            elderlyLowPass.type = 'lowpass';
+            elderlyLowPass.frequency.value = 1200; // Aged voice cutoff
+            elderlyLowPass.Q.value = 3;
             
-            const elderlyMaleFilter3 = audioContext.createBiquadFilter();
-            elderlyMaleFilter3.type = 'highpass';
-            elderlyMaleFilter3.frequency.value = 80; // Remove very low frequencies
-            elderlyMaleFilter3.Q.value = 1;
+            const elderlyFormant1 = audioContext.createBiquadFilter();
+            elderlyFormant1.type = 'peaking';
+            elderlyFormant1.frequency.value = 400; // Lower formant
+            elderlyFormant1.Q.value = 4;
+            elderlyFormant1.gain.value = 12;
+            
+            const elderlyFormant2 = audioContext.createBiquadFilter();
+            elderlyFormant2.type = 'peaking';
+            elderlyFormant2.frequency.value = 800; // Second formant
+            elderlyFormant2.Q.value = 2;
+            elderlyFormant2.gain.value = 8;
+            
+            // Create tremolo effect using LFO
+            const elderlyTremolo = audioContext.createGain();
+            const elderlyLFO = audioContext.createOscillator();
+            const elderlyLFOGain = audioContext.createGain();
+            
+            elderlyLFO.frequency.value = 4.5; // Slight tremolo
+            elderlyLFO.type = 'sine';
+            elderlyLFOGain.gain.value = 0.2; // 20% tremolo depth
+            
+            elderlyLFO.connect(elderlyLFOGain);
+            elderlyLFOGain.connect(elderlyTremolo.gain);
+            elderlyTremolo.gain.value = 1.0;
+            
+            const elderlyCompressor = audioContext.createDynamicsCompressor();
+            elderlyCompressor.threshold.value = -15;
+            elderlyCompressor.knee.value = 30;
+            elderlyCompressor.ratio.value = 15;
+            elderlyCompressor.attack.value = 0.005;
+            elderlyCompressor.release.value = 0.2;
             
             inputGain.disconnect();
-            inputGain.connect(elderlyMaleFilter3);
-            elderlyMaleFilter3.connect(elderlyMaleFilter1);
-            elderlyMaleFilter1.connect(elderlyMaleFilter2);
-            elderlyMaleFilter2.connect(outputGain);
+            inputGain.connect(elderlyHighPass);
+            elderlyHighPass.connect(elderlyLowPass);
+            elderlyLowPass.connect(elderlyFormant1);
+            elderlyFormant1.connect(elderlyFormant2);
+            elderlyFormant2.connect(elderlyTremolo);
+            elderlyTremolo.connect(elderlyCompressor);
+            elderlyCompressor.connect(outputGain);
             
-            inputGain.gain.value = 1.5; // Higher input
-            outputGain.gain.value = 0.6; // Lower output for aged effect
+            elderlyLFO.start();
+            
+            inputGain.gain.value = 2.5;
+            outputGain.gain.value = 0.4;
             break;
             
         case 'elderly-female':
