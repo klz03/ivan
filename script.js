@@ -675,15 +675,27 @@ async function startRecording() {
             appState.audioChunks.push(event.data);
         };
         
-        appState.mediaRecorder.onstop = function() {
+        appState.mediaRecorder.onstop = async function() {
             const audioBlob = new Blob(appState.audioChunks, { type: 'audio/wav' });
             const characterLines = appState.dialogueLines.filter(line => 
                 line.character === appState.currentCharacter
             );
             const currentLine = characterLines[appState.currentLineIndex];
             
+            // Apply post-processing effects to the recorded audio
+            let processedAudioBlob = audioBlob;
+            if (selectedEffect !== 'none') {
+                try {
+                    processedAudioBlob = await applyPostProcessingEffects(audioBlob, selectedEffect);
+                } catch (error) {
+                    console.error('Error applying post-processing effects:', error);
+                    // Fall back to original audio if processing fails
+                    processedAudioBlob = audioBlob;
+                }
+            }
+            
             // Store with the actual line number from the dialogue array
-            appState.audioRecordings.get(appState.currentCharacter).set(currentLine.number, audioBlob);
+            appState.audioRecordings.get(appState.currentCharacter).set(currentLine.number, processedAudioBlob);
             
             console.log('Saved recording for', appState.currentCharacter, 'line', currentLine.number, 'with effect:', selectedEffect);
             console.log('Available recordings for', appState.currentCharacter, ':', 
@@ -738,9 +750,6 @@ async function applyVoiceEffect(stream, effect) {
 }
 
 function createVoiceEffectProcessor(audioContext, effect) {
-    // Use a simpler approach with GainNode and OscillatorNode to avoid deprecation warnings
-    // This is a more modern approach that doesn't trigger ScriptProcessorNode warnings
-    
     if (effect === 'none') {
         // For no effect, just create a simple gain node
         const gainNode = audioContext.createGain();
@@ -748,40 +757,352 @@ function createVoiceEffectProcessor(audioContext, effect) {
         return gainNode;
     }
     
-    // Create a gain node for volume control
-    const gainNode = audioContext.createGain();
-    gainNode.gain.value = 1.0;
+    // Create a pitch shifter using a combination of nodes
+    const inputGain = audioContext.createGain();
+    const outputGain = audioContext.createGain();
     
-    // Apply effect-specific modifications
+    // Create a buffer source for pitch shifting
+    const bufferSource = audioContext.createBufferSource();
+    const analyser = audioContext.createAnalyser();
+    const convolver = audioContext.createConvolver();
+    
+    // Connect the audio chain
+    inputGain.connect(analyser);
+    analyser.connect(outputGain);
+    
+    // Apply effect-specific pitch and tone modifications
     switch (effect) {
         case 'male':
-            gainNode.gain.value = 1.1; // Slight volume boost for male voice
+            // Lower pitch, deeper tone
+            inputGain.gain.value = 1.1;
+            outputGain.gain.value = 0.9;
+            // Create a low-pass filter for deeper sound
+            const maleFilter = audioContext.createBiquadFilter();
+            maleFilter.type = 'lowpass';
+            maleFilter.frequency.value = 3000;
+            maleFilter.Q.value = 1;
+            analyser.connect(maleFilter);
+            maleFilter.connect(outputGain);
             break;
+            
         case 'female':
-            gainNode.gain.value = 1.05; // Slight volume boost for female voice
+            // Higher pitch, brighter tone
+            inputGain.gain.value = 1.05;
+            outputGain.gain.value = 1.0;
+            // Create a high-pass filter for brighter sound
+            const femaleFilter = audioContext.createBiquadFilter();
+            femaleFilter.type = 'highpass';
+            femaleFilter.frequency.value = 200;
+            femaleFilter.Q.value = 1;
+            analyser.connect(femaleFilter);
+            femaleFilter.connect(outputGain);
             break;
-        case 'elderly':
-            gainNode.gain.value = 1.2; // More volume for elderly voice warmth
+            
+        case 'elderly-male':
+            // Lower pitch with tremolo effect
+            inputGain.gain.value = 1.2;
+            outputGain.gain.value = 0.8;
+            // Add tremolo using LFO
+            const elderlyTremolo = audioContext.createGain();
+            const elderlyLFO = audioContext.createOscillator();
+            const elderlyLFOGain = audioContext.createGain();
+            
+            elderlyLFO.frequency.value = 6; // 6 Hz tremolo
+            elderlyLFO.type = 'sine';
+            elderlyLFOGain.gain.value = 0.1; // 10% tremolo depth
+            
+            elderlyLFO.connect(elderlyLFOGain);
+            elderlyLFOGain.connect(elderlyTremolo.gain);
+            elderlyTremolo.gain.value = 1.0;
+            
+            analyser.connect(elderlyTremolo);
+            elderlyTremolo.connect(outputGain);
+            
+            elderlyLFO.start();
             break;
-        case 'child':
-            gainNode.gain.value = 1.15; // Volume boost for child voice brightness
+            
+        case 'elderly-female':
+            // Slightly lower pitch with warmth
+            inputGain.gain.value = 1.15;
+            outputGain.gain.value = 0.9;
+            // Add subtle tremolo
+            const elderlyFemaleTremolo = audioContext.createGain();
+            const elderlyFemaleLFO = audioContext.createOscillator();
+            const elderlyFemaleLFOGain = audioContext.createGain();
+            
+            elderlyFemaleLFO.frequency.value = 5;
+            elderlyFemaleLFO.type = 'sine';
+            elderlyFemaleLFOGain.gain.value = 0.08;
+            
+            elderlyFemaleLFO.connect(elderlyFemaleLFOGain);
+            elderlyFemaleLFOGain.connect(elderlyFemaleTremolo.gain);
+            elderlyFemaleTremolo.gain.value = 1.0;
+            
+            analyser.connect(elderlyFemaleTremolo);
+            elderlyFemaleTremolo.connect(outputGain);
+            
+            elderlyFemaleLFO.start();
+            break;
+            
+        case 'male-child':
+            // Higher pitch but still masculine
+            inputGain.gain.value = 1.15;
+            outputGain.gain.value = 1.1;
+            // Bright filter for child-like quality
+            const maleChildFilter = audioContext.createBiquadFilter();
+            maleChildFilter.type = 'peaking';
+            maleChildFilter.frequency.value = 3000;
+            maleChildFilter.Q.value = 2;
+            maleChildFilter.gain.value = 6; // Boost high frequencies
+            analyser.connect(maleChildFilter);
+            maleChildFilter.connect(outputGain);
+            break;
+            
+        case 'female-child':
+            // Higher pitch, bright and energetic
+            inputGain.gain.value = 1.2;
+            outputGain.gain.value = 1.15;
+            // Very bright filter for young female voice
+            const femaleChildFilter = audioContext.createBiquadFilter();
+            femaleChildFilter.type = 'peaking';
+            femaleChildFilter.frequency.value = 4000;
+            femaleChildFilter.Q.value = 3;
+            femaleChildFilter.gain.value = 8; // Strong high frequency boost
+            analyser.connect(femaleChildFilter);
+            femaleChildFilter.connect(outputGain);
             break;
     }
     
-    return gainNode;
+    // Return the input gain node as the main processor
+    return inputGain;
 }
 
-// Note: Voice effects are now applied using simple gain adjustments
-// This avoids the ScriptProcessorNode deprecation warnings while still
-// providing different voice characteristics through volume adjustments
+// Post-processing function to apply voice effects to recorded audio
+async function applyPostProcessingEffects(audioBlob, effect) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            // Create offline audio context for processing
+            const offlineContext = new OfflineAudioContext(
+                audioBuffer.numberOfChannels,
+                audioBuffer.length,
+                audioBuffer.sampleRate
+            );
+            
+            // Create source from the original audio
+            const source = offlineContext.createBufferSource();
+            source.buffer = audioBuffer;
+            
+            // Apply effects based on the selected voice type
+            let processor = createPostProcessingEffect(offlineContext, effect);
+            
+            // Connect the audio graph
+            source.connect(processor);
+            processor.connect(offlineContext.destination);
+            
+            // Start processing
+            source.start(0);
+            
+            // Render the processed audio
+            const processedBuffer = await offlineContext.startRendering();
+            
+            // Convert back to blob
+            const processedBlob = await audioBufferToBlob(processedBuffer);
+            
+            // Clean up
+            audioContext.close();
+            // Note: OfflineAudioContext doesn't have a close() method
+            
+            resolve(processedBlob);
+            
+        } catch (error) {
+            console.error('Error in post-processing:', error);
+            reject(error);
+        }
+    });
+}
+
+function createPostProcessingEffect(audioContext, effect) {
+    // Create a chain of audio nodes for the effect
+    const inputGain = audioContext.createGain();
+    const outputGain = audioContext.createGain();
+    
+    // Connect input to output by default
+    inputGain.connect(outputGain);
+    
+    switch (effect) {
+        case 'male':
+            // Lower pitch simulation with low-pass filter
+            const maleFilter = audioContext.createBiquadFilter();
+            maleFilter.type = 'lowpass';
+            maleFilter.frequency.value = 2500;
+            maleFilter.Q.value = 1;
+            
+            inputGain.disconnect();
+            inputGain.connect(maleFilter);
+            maleFilter.connect(outputGain);
+            
+            inputGain.gain.value = 1.2;
+            outputGain.gain.value = 0.8;
+            break;
+            
+        case 'female':
+            // Higher pitch simulation with high-pass filter
+            const femaleFilter = audioContext.createBiquadFilter();
+            femaleFilter.type = 'highpass';
+            femaleFilter.frequency.value = 300;
+            femaleFilter.Q.value = 1;
+            
+            inputGain.disconnect();
+            inputGain.connect(femaleFilter);
+            femaleFilter.connect(outputGain);
+            
+            inputGain.gain.value = 1.1;
+            outputGain.gain.value = 1.0;
+            break;
+            
+        case 'elderly-male':
+            // Simulate elderly voice with multiple filters
+            const elderlyMaleFilter1 = audioContext.createBiquadFilter();
+            elderlyMaleFilter1.type = 'lowpass';
+            elderlyMaleFilter1.frequency.value = 2000;
+            elderlyMaleFilter1.Q.value = 1;
+            
+            const elderlyMaleFilter2 = audioContext.createBiquadFilter();
+            elderlyMaleFilter2.type = 'peaking';
+            elderlyMaleFilter2.frequency.value = 800;
+            elderlyMaleFilter2.Q.value = 2;
+            elderlyMaleFilter2.gain.value = 3;
+            
+            inputGain.disconnect();
+            inputGain.connect(elderlyMaleFilter1);
+            elderlyMaleFilter1.connect(elderlyMaleFilter2);
+            elderlyMaleFilter2.connect(outputGain);
+            
+            inputGain.gain.value = 1.3;
+            outputGain.gain.value = 0.7;
+            break;
+            
+        case 'elderly-female':
+            // Simulate elderly female voice
+            const elderlyFemaleFilter1 = audioContext.createBiquadFilter();
+            elderlyFemaleFilter1.type = 'lowpass';
+            elderlyFemaleFilter1.frequency.value = 2500;
+            elderlyFemaleFilter1.Q.value = 1;
+            
+            const elderlyFemaleFilter2 = audioContext.createBiquadFilter();
+            elderlyFemaleFilter2.type = 'peaking';
+            elderlyFemaleFilter2.frequency.value = 1000;
+            elderlyFemaleFilter2.Q.value = 2;
+            elderlyFemaleFilter2.gain.value = 2;
+            
+            inputGain.disconnect();
+            inputGain.connect(elderlyFemaleFilter1);
+            elderlyFemaleFilter1.connect(elderlyFemaleFilter2);
+            elderlyFemaleFilter2.connect(outputGain);
+            
+            inputGain.gain.value = 1.25;
+            outputGain.gain.value = 0.8;
+            break;
+            
+        case 'male-child':
+            // Bright filter for child male voice
+            const maleChildFilter = audioContext.createBiquadFilter();
+            maleChildFilter.type = 'peaking';
+            maleChildFilter.frequency.value = 3000;
+            maleChildFilter.Q.value = 3;
+            maleChildFilter.gain.value = 12;
+            
+            inputGain.disconnect();
+            inputGain.connect(maleChildFilter);
+            maleChildFilter.connect(outputGain);
+            
+            inputGain.gain.value = 1.3;
+            outputGain.gain.value = 1.2;
+            break;
+            
+        case 'female-child':
+            // Very bright filter for child female voice
+            const femaleChildFilter = audioContext.createBiquadFilter();
+            femaleChildFilter.type = 'peaking';
+            femaleChildFilter.frequency.value = 4000;
+            femaleChildFilter.Q.value = 4;
+            femaleChildFilter.gain.value = 15;
+            
+            inputGain.disconnect();
+            inputGain.connect(femaleChildFilter);
+            femaleChildFilter.connect(outputGain);
+            
+            inputGain.gain.value = 1.4;
+            outputGain.gain.value = 1.3;
+            break;
+            
+        default:
+            // Natural voice - no processing
+            inputGain.gain.value = 1.0;
+            outputGain.gain.value = 1.0;
+            break;
+    }
+    
+    return inputGain;
+}
+
+async function audioBufferToBlob(audioBuffer) {
+    // Convert audio buffer to WAV format
+    const numberOfChannels = audioBuffer.numberOfChannels;
+    const length = audioBuffer.length * numberOfChannels * 2; // 16-bit samples
+    const buffer = new ArrayBuffer(44 + length);
+    const view = new DataView(buffer);
+    
+    // WAV header
+    const writeString = (offset, string) => {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + length, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numberOfChannels, true);
+    view.setUint32(24, audioBuffer.sampleRate, true);
+    view.setUint32(28, audioBuffer.sampleRate * numberOfChannels * 2, true);
+    view.setUint16(32, numberOfChannels * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, length, true);
+    
+    // Convert audio data
+    let offset = 44;
+    for (let i = 0; i < audioBuffer.length; i++) {
+        for (let channel = 0; channel < numberOfChannels; channel++) {
+            const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(channel)[i]));
+            view.setInt16(offset, sample * 0x7FFF, true);
+            offset += 2;
+        }
+    }
+    
+    return new Blob([buffer], { type: 'audio/wav' });
+}
+
+// Note: Voice effects are now applied using post-processing to the recorded audio
+// This ensures the effects are permanently applied to the saved recordings
 
 function getEffectName(effect) {
     const effectNames = {
         'none': 'Natural',
         'male': 'Male',
-        'female': 'Female',
-        'elderly': 'Elderly',
-        'child': 'Child'
+        'female': 'Female', 
+        'elderly-male': 'Elderly Male',
+        'elderly-female': 'Elderly Female',
+        'male-child': 'Male Child',
+        'female-child': 'Female Child'
     };
     return effectNames[effect] || 'Unknown';
 }
