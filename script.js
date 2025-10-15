@@ -686,9 +686,12 @@ async function startRecording() {
             let processedAudioBlob = audioBlob;
             if (selectedEffect !== 'none') {
                 try {
+                    console.log('Attempting to apply voice effect:', selectedEffect);
                     processedAudioBlob = await applyPostProcessingEffects(audioBlob, selectedEffect);
+                    console.log('Voice effect applied successfully');
                 } catch (error) {
                     console.error('Error applying post-processing effects:', error);
+                    console.log('Falling back to original audio');
                     // Fall back to original audio if processing fails
                     processedAudioBlob = audioBlob;
                 }
@@ -881,9 +884,29 @@ function createVoiceEffectProcessor(audioContext, effect) {
 async function applyPostProcessingEffects(audioBlob, effect) {
     return new Promise(async (resolve, reject) => {
         try {
+            console.log('Starting post-processing for effect:', effect);
+            console.log('Original blob size:', audioBlob.size, 'bytes');
+            console.log('Original blob type:', audioBlob.type);
+            
+            if (audioBlob.size === 0) {
+                throw new Error('Audio blob is empty');
+            }
+            
             const audioContext = new (window.AudioContext || window.webkitAudioContext)();
             const arrayBuffer = await audioBlob.arrayBuffer();
+            console.log('ArrayBuffer size:', arrayBuffer.byteLength, 'bytes');
+            
+            if (arrayBuffer.byteLength === 0) {
+                throw new Error('ArrayBuffer is empty');
+            }
+            
             const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            console.log('AudioBuffer:', {
+                length: audioBuffer.length,
+                duration: audioBuffer.duration,
+                sampleRate: audioBuffer.sampleRate,
+                numberOfChannels: audioBuffer.numberOfChannels
+            });
             
             // Create offline audio context for processing
             const offlineContext = new OfflineAudioContext(
@@ -898,6 +921,7 @@ async function applyPostProcessingEffects(audioBlob, effect) {
             
             // Apply effects based on the selected voice type
             let processor = createPostProcessingEffect(offlineContext, effect);
+            console.log('Created processor for effect:', effect);
             
             // Connect the audio graph
             source.connect(processor);
@@ -907,10 +931,18 @@ async function applyPostProcessingEffects(audioBlob, effect) {
             source.start(0);
             
             // Render the processed audio
+            console.log('Starting offline rendering...');
             const processedBuffer = await offlineContext.startRendering();
+            console.log('Offline rendering complete. Processed buffer:', {
+                length: processedBuffer.length,
+                duration: processedBuffer.duration,
+                sampleRate: processedBuffer.sampleRate,
+                numberOfChannels: processedBuffer.numberOfChannels
+            });
             
             // Convert back to blob
             const processedBlob = await audioBufferToBlob(processedBuffer);
+            console.log('Processed blob size:', processedBlob.size, 'bytes');
             
             // Clean up
             audioContext.close();
@@ -920,6 +952,7 @@ async function applyPostProcessingEffects(audioBlob, effect) {
             
         } catch (error) {
             console.error('Error in post-processing:', error);
+            console.error('Error stack:', error.stack);
             reject(error);
         }
     });
@@ -935,55 +968,68 @@ function createPostProcessingEffect(audioContext, effect) {
     
     switch (effect) {
         case 'male':
-            // Lower pitch simulation with low-pass filter
+            // Lower pitch simulation with dramatic low-pass filter
             const maleFilter = audioContext.createBiquadFilter();
             maleFilter.type = 'lowpass';
-            maleFilter.frequency.value = 2500;
-            maleFilter.Q.value = 1;
+            maleFilter.frequency.value = 1800; // Much lower for deeper male voice
+            maleFilter.Q.value = 2;
             
             inputGain.disconnect();
             inputGain.connect(maleFilter);
             maleFilter.connect(outputGain);
             
-            inputGain.gain.value = 1.2;
-            outputGain.gain.value = 0.8;
+            inputGain.gain.value = 1.4;
+            outputGain.gain.value = 0.7;
             break;
             
         case 'female':
-            // Higher pitch simulation with high-pass filter
+            // Higher pitch simulation with dramatic high-pass filter
             const femaleFilter = audioContext.createBiquadFilter();
             femaleFilter.type = 'highpass';
-            femaleFilter.frequency.value = 300;
-            femaleFilter.Q.value = 1;
+            femaleFilter.frequency.value = 500; // Much higher for brighter female voice
+            femaleFilter.Q.value = 2;
+            
+            const femaleBoost = audioContext.createBiquadFilter();
+            femaleBoost.type = 'peaking';
+            femaleBoost.frequency.value = 3000;
+            femaleBoost.Q.value = 2;
+            femaleBoost.gain.value = 6; // Boost high frequencies
             
             inputGain.disconnect();
             inputGain.connect(femaleFilter);
-            femaleFilter.connect(outputGain);
+            femaleFilter.connect(femaleBoost);
+            femaleBoost.connect(outputGain);
             
-            inputGain.gain.value = 1.1;
-            outputGain.gain.value = 1.0;
+            inputGain.gain.value = 1.3;
+            outputGain.gain.value = 1.1;
             break;
             
         case 'elderly-male':
-            // Simulate elderly voice with multiple filters
+            // Simulate elderly voice with dramatic filtering
             const elderlyMaleFilter1 = audioContext.createBiquadFilter();
             elderlyMaleFilter1.type = 'lowpass';
-            elderlyMaleFilter1.frequency.value = 2000;
-            elderlyMaleFilter1.Q.value = 1;
+            elderlyMaleFilter1.frequency.value = 1500; // Much lower for deeper voice
+            elderlyMaleFilter1.Q.value = 2;
             
             const elderlyMaleFilter2 = audioContext.createBiquadFilter();
             elderlyMaleFilter2.type = 'peaking';
-            elderlyMaleFilter2.frequency.value = 800;
-            elderlyMaleFilter2.Q.value = 2;
-            elderlyMaleFilter2.gain.value = 3;
+            elderlyMaleFilter2.frequency.value = 600; // Lower frequency for aged voice
+            elderlyMaleFilter2.Q.value = 3;
+            elderlyMaleFilter2.gain.value = 8; // Much stronger boost
+            
+            const elderlyMaleFilter3 = audioContext.createBiquadFilter();
+            elderlyMaleFilter3.type = 'highpass';
+            elderlyMaleFilter3.frequency.value = 80; // Remove very low frequencies
+            elderlyMaleFilter3.Q.value = 1;
             
             inputGain.disconnect();
-            inputGain.connect(elderlyMaleFilter1);
+            inputGain.connect(elderlyMaleFilter3);
+            elderlyMaleFilter3.connect(elderlyMaleFilter1);
             elderlyMaleFilter1.connect(elderlyMaleFilter2);
             elderlyMaleFilter2.connect(outputGain);
             
-            inputGain.gain.value = 1.3;
-            outputGain.gain.value = 0.7;
+            inputGain.gain.value = 1.5; // Higher input
+            outputGain.gain.value = 0.6; // Lower output for aged effect
             break;
             
         case 'elderly-female':
@@ -1052,8 +1098,11 @@ function createPostProcessingEffect(audioContext, effect) {
 
 async function audioBufferToBlob(audioBuffer) {
     // Convert audio buffer to WAV format
+    console.log('Converting audioBuffer to blob...');
     const numberOfChannels = audioBuffer.numberOfChannels;
     const length = audioBuffer.length * numberOfChannels * 2; // 16-bit samples
+    console.log('WAV conversion params:', { numberOfChannels, length, totalSize: 44 + length });
+    
     const buffer = new ArrayBuffer(44 + length);
     const view = new DataView(buffer);
     
@@ -1088,7 +1137,9 @@ async function audioBufferToBlob(audioBuffer) {
         }
     }
     
-    return new Blob([buffer], { type: 'audio/wav' });
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+    console.log('WAV blob created:', { size: blob.size, type: blob.type });
+    return blob;
 }
 
 // Note: Voice effects are now applied using post-processing to the recorded audio
