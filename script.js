@@ -1265,6 +1265,17 @@ function stopProduction() {
     appState.isProductionMode = false;
     appState.productionLineIndex = 0;
     
+    // Stop speech recognition
+    if (appState.recognition) {
+        appState.recognition.stop();
+    }
+    
+    // Clear any speech timeout
+    if (appState.speechTimeout) {
+        clearTimeout(appState.speechTimeout);
+        appState.speechTimeout = null;
+    }
+    
     document.getElementById('startProductionBtn').disabled = false;
     document.getElementById('pauseProductionBtn').disabled = true;
     document.getElementById('stopProductionBtn').disabled = true;
@@ -1275,8 +1286,32 @@ function stopProduction() {
 
 function updateProductionInterface() {
     if (appState.productionLineIndex >= appState.dialogueLines.length) {
-        stopProduction();
-        showStatusMessage('Production completed!', 'success');
+        // Production completed - stop everything
+        appState.isProductionMode = false;
+        
+        // Stop speech recognition
+        if (appState.recognition) {
+            appState.recognition.stop();
+        }
+        
+        // Clear any speech timeout
+        if (appState.speechTimeout) {
+            clearTimeout(appState.speechTimeout);
+            appState.speechTimeout = null;
+        }
+        
+        // Reset button states
+        document.getElementById('startProductionBtn').disabled = false;
+        document.getElementById('pauseProductionBtn').disabled = true;
+        document.getElementById('stopProductionBtn').disabled = true;
+        
+        // Show completion message
+        showStatusMessage('🎬 Production completed! Script finished.', 'success');
+        
+        // Update the interface to show completion
+        document.getElementById('productionLineNumber').textContent = 'Complete';
+        document.getElementById('productionTeleprompterText').textContent = '🎉 Script finished! Production complete.';
+        
         return;
     }
     
