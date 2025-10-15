@@ -18,6 +18,8 @@ class AppState {
         this.speechTimeout = null;
         this.audioContext = null;
         this.audioProcessor = null;
+        this.currentAudio = null; // Track currently playing audio
+        this.isPaused = false;
     }
 
     reset() {
@@ -34,6 +36,8 @@ class AppState {
         this.audioChunks = [];
         this.isProductionMode = false;
         this.productionLineIndex = 0;
+        this.currentAudio = null;
+        this.isPaused = false;
     }
 }
 
@@ -1294,7 +1298,12 @@ function finishRecordingSession() {
 // Production Functions
 function startProduction() {
     appState.isProductionMode = true;
-    appState.productionLineIndex = 0;
+    appState.isPaused = false;
+    
+    // If resuming from pause, don't reset the line index
+    if (appState.productionLineIndex === 0) {
+        appState.productionLineIndex = 0;
+    }
     
     document.getElementById('startProductionBtn').disabled = true;
     document.getElementById('pauseProductionBtn').disabled = false;
@@ -1305,7 +1314,23 @@ function startProduction() {
 }
 
 function pauseProduction() {
-    appState.isProductionMode = false;
+    appState.isPaused = true;
+    
+    // Pause currently playing audio
+    if (appState.currentAudio) {
+        appState.currentAudio.pause();
+    }
+    
+    // Stop speech recognition
+    if (appState.recognition) {
+        appState.recognition.stop();
+    }
+    
+    // Clear any speech timeout
+    if (appState.speechTimeout) {
+        clearTimeout(appState.speechTimeout);
+        appState.speechTimeout = null;
+    }
     
     document.getElementById('startProductionBtn').disabled = false;
     document.getElementById('pauseProductionBtn').disabled = true;
@@ -1315,7 +1340,15 @@ function pauseProduction() {
 
 function stopProduction() {
     appState.isProductionMode = false;
+    appState.isPaused = false;
     appState.productionLineIndex = 0;
+    
+    // Stop currently playing audio
+    if (appState.currentAudio) {
+        appState.currentAudio.pause();
+        appState.currentAudio.currentTime = 0;
+        appState.currentAudio = null;
+    }
     
     // Stop speech recognition
     if (appState.recognition) {
@@ -1378,6 +1411,11 @@ function updateProductionInterface() {
     document.getElementById('productionLineNumber').textContent = currentLine.number;
     document.getElementById('productionTeleprompterText').textContent = currentLine.dialogue;
     
+    // Don't process if paused
+    if (appState.isPaused) {
+        return;
+    }
+    
     const playRecordings = document.getElementById('playRecordings').checked;
     const liveSpeaking = document.getElementById('liveSpeaking').checked;
     
@@ -1401,7 +1439,7 @@ function updateProductionInterface() {
     } else if (liveSpeaking && appState.speakCharacters.has(currentLine.character)) {
         // Wait for live speaking
         document.getElementById('statusText').textContent = 'Waiting for live speech...';
-        if (appState.recognition && appState.recognition.state !== 'started') {
+        if (appState.recognition && appState.recognition.state !== 'started' && !appState.isPaused) {
             try {
                 appState.recognition.start();
             } catch (error) {
@@ -1430,19 +1468,32 @@ function advanceProductionLine() {
 }
 
 function playAudioBlob(audioBlob) {
+    // Stop any currently playing audio
+    if (appState.currentAudio) {
+        appState.currentAudio.pause();
+        appState.currentAudio.currentTime = 0;
+    }
+    
     const audio = new Audio();
     audio.src = URL.createObjectURL(audioBlob);
+    appState.currentAudio = audio; // Track the current audio
     
     audio.onended = function() {
-        advanceProductionLine();
+        if (appState.isProductionMode && !appState.isPaused) {
+            advanceProductionLine();
+        }
     };
     
     audio.onerror = function() {
         console.error('Error playing audio');
-        advanceProductionLine();
+        if (appState.isProductionMode && !appState.isPaused) {
+            advanceProductionLine();
+        }
     };
     
-    audio.play();
+    if (!appState.isPaused) {
+        audio.play();
+    }
 }
 
 // Utility Functions
