@@ -1285,6 +1285,12 @@ function stopProduction() {
 }
 
 function updateProductionInterface() {
+    console.log('updateProductionInterface called:', {
+        productionLineIndex: appState.productionLineIndex,
+        dialogueLinesLength: appState.dialogueLines.length,
+        shouldStop: appState.productionLineIndex >= appState.dialogueLines.length
+    });
+    
     if (appState.productionLineIndex >= appState.dialogueLines.length) {
         // Production completed - stop everything
         appState.isProductionMode = false;
@@ -1364,7 +1370,7 @@ function advanceProductionLine() {
     }
     
     appState.productionLineIndex++;
-    console.log('Advanced to production line', appState.productionLineIndex);
+    console.log('Advanced to production line', appState.productionLineIndex, 'of', appState.dialogueLines.length);
     
     setTimeout(() => {
         updateProductionInterface();
