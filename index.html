@@ -211,6 +211,20 @@
                             <p>Current timeout: <strong id="currentTimeoutDisplay">2 minutes</strong></p>
                         </div>
                     </div>
+                    <div class="loop-config">
+                        <h3>Loop Settings</h3>
+                        <p>Configure continuous playback behavior</p>
+                        <div class="loop-controls">
+                            <label class="loop-toggle">
+                                <input type="checkbox" id="enableLoop">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Enable Continuous Loop</span>
+                            </label>
+                            <div class="loop-info">
+                                <p>When enabled, the script will automatically restart from the beginning when it reaches the end.</p>
+                            </div>
+                        </div>
+                    </div>
                     <div class="production-controls">
                         <button class="btn btn-primary" id="startProductionBtn">🎬 Start Production</button>
                         <button class="btn btn-secondary" id="pauseProductionBtn" disabled>⏸️ Pause</button>

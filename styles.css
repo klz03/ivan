@@ -913,6 +913,100 @@ body {
     font-size: 1.05rem;
 }
 
+/* Loop Configuration */
+.loop-config {
+    background: #f0f9ff;
+    padding: 20px;
+    border-radius: 12px;
+    border-left: 4px solid #38b2ac;
+}
+
+.loop-config h3 {
+    margin-bottom: 10px;
+    color: #2d3748;
+}
+
+.loop-config > p {
+    margin-bottom: 15px;
+    color: #4a5568;
+    font-size: 0.95rem;
+}
+
+.loop-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.loop-toggle {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    cursor: pointer;
+    padding: 10px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.loop-toggle:hover {
+    background: rgba(56, 178, 172, 0.1);
+}
+
+.loop-toggle input[type="checkbox"] {
+    display: none;
+}
+
+.toggle-slider {
+    position: relative;
+    width: 50px;
+    height: 26px;
+    background: #cbd5e0;
+    border-radius: 13px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 22px;
+    height: 22px;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.loop-toggle input[type="checkbox"]:checked + .toggle-slider {
+    background: #38b2ac;
+}
+
+.loop-toggle input[type="checkbox"]:checked + .toggle-slider::before {
+    transform: translateX(24px);
+}
+
+.toggle-label {
+    font-weight: 500;
+    color: #2d3748;
+    font-size: 1rem;
+}
+
+.loop-info {
+    background: white;
+    padding: 12px 15px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+}
+
+.loop-info p {
+    margin: 0;
+    color: #4a5568;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
 .production-controls {
     display: flex;
     justify-content: center;
@@ -1340,6 +1434,42 @@ body {
     .custom-timeout input[type="number"] {
         width: 100%;
         padding: 8px;
+    }
+    
+    /* Loop Configuration Mobile */
+    .loop-config {
+        padding: 15px;
+    }
+    
+    .loop-toggle {
+        padding: 15px;
+        gap: 20px;
+    }
+    
+    .toggle-slider {
+        width: 60px;
+        height: 30px;
+    }
+    
+    .toggle-slider::before {
+        width: 26px;
+        height: 26px;
+    }
+    
+    .loop-toggle input[type="checkbox"]:checked + .toggle-slider::before {
+        transform: translateX(30px);
+    }
+    
+    .toggle-label {
+        font-size: 1.1rem;
+    }
+    
+    .loop-info {
+        padding: 15px;
+    }
+    
+    .loop-info p {
+        font-size: 1rem;
     }
     
     .production-controls {

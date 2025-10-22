@@ -22,6 +22,7 @@ class AppState {
         this.currentAudio = null; // Track currently playing audio
         this.isPaused = false;
         this.speechTimeoutDuration = 120000; // Default 2 minutes in milliseconds
+        this.loopEnabled = false; // Loop toggle state
     }
 
     reset() {
@@ -100,6 +101,9 @@ function setupEventListeners() {
     // Timeout Configuration
     document.getElementById('timeoutDuration').addEventListener('change', handleTimeoutChange);
     document.getElementById('applyCustomTimeout').addEventListener('click', applyCustomTimeout);
+    
+    // Loop Configuration
+    document.getElementById('enableLoop').addEventListener('change', handleLoopToggle);
 }
 
 function setupMobileOptimizations() {
@@ -1822,6 +1826,14 @@ function updateTimeoutDisplay() {
     }
 }
 
+// Loop Configuration Functions
+function handleLoopToggle(e) {
+    appState.loopEnabled = e.target.checked;
+    const status = appState.loopEnabled ? 'enabled' : 'disabled';
+    showStatusMessage(`Continuous loop ${status}`, 'success');
+    console.log('Loop toggle:', appState.loopEnabled);
+}
+
 // Production Functions
 function startProduction() {
     appState.isProductionMode = true;
@@ -2028,33 +2040,48 @@ function updateProductionInterface() {
     });
     
     if (appState.productionLineIndex >= appState.dialogueLines.length) {
-        // Production completed - stop everything
-        appState.isProductionMode = false;
-        
-        // Stop speech recognition
-        if (appState.recognition) {
-            appState.recognition.stop();
+        // Production completed - check if looping is enabled
+        if (appState.loopEnabled) {
+            // Loop enabled - restart from beginning
+            console.log('Looping enabled - restarting production');
+            appState.productionLineIndex = 0;
+            showStatusMessage('🔄 Looping back to start of script...', 'info');
+            
+            // Small delay before restarting to show the message
+            setTimeout(() => {
+                updateProductionInterface();
+            }, 1000);
+            
+            return;
+        } else {
+            // No loop - stop everything
+            appState.isProductionMode = false;
+            
+            // Stop speech recognition
+            if (appState.recognition) {
+                appState.recognition.stop();
+            }
+            
+            // Clear any speech timeout
+            if (appState.speechTimeout) {
+                clearTimeout(appState.speechTimeout);
+                appState.speechTimeout = null;
+            }
+            
+            // Reset button states
+            document.getElementById('startProductionBtn').disabled = false;
+            document.getElementById('pauseProductionBtn').disabled = true;
+            document.getElementById('stopProductionBtn').disabled = true;
+            
+            // Show completion message
+            showStatusMessage('🎬 Production completed! Script finished.', 'success');
+            
+            // Update the interface to show completion
+            document.getElementById('productionLineNumber').textContent = 'Complete';
+            document.getElementById('productionTeleprompterCurrentLine').textContent = '🎉 Script finished! Production complete.';
+            
+            return;
         }
-        
-        // Clear any speech timeout
-        if (appState.speechTimeout) {
-            clearTimeout(appState.speechTimeout);
-            appState.speechTimeout = null;
-        }
-        
-        // Reset button states
-        document.getElementById('startProductionBtn').disabled = false;
-        document.getElementById('pauseProductionBtn').disabled = true;
-        document.getElementById('stopProductionBtn').disabled = true;
-        
-        // Show completion message
-        showStatusMessage('🎬 Production completed! Script finished.', 'success');
-        
-        // Update the interface to show completion
-        document.getElementById('productionLineNumber').textContent = 'Complete';
-        document.getElementById('productionTeleprompterCurrentLine').textContent = '🎉 Script finished! Production complete.';
-        
-        return;
     }
     
     const currentLine = appState.dialogueLines[appState.productionLineIndex];
