@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Script Teleprompter & Voice Recorder</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -47,11 +50,41 @@
                 </div>
             </section>
 
-            <!-- Step 2: Character Selection -->
+            <!-- Step 2: Character Line Review -->
+            <section id="character-line-review-section" class="step-section">
+                <div class="step-header">
+                    <h2>Step 2: Review Character Lines</h2>
+                    <div class="step-number">2</div>
+                </div>
+                <div class="line-review-interface">
+                    <div class="review-instructions">
+                        <p>Review the parsed dialogue lines below. You can:</p>
+                        <ul>
+                            <li>✅ <strong>Keep</strong> lines correctly attributed to characters</li>
+                            <li>🔄 <strong>Reassign</strong> lines to different characters</li>
+                            <li>❌ <strong>Remove</strong> lines that aren't dialogue</li>
+                            <li>➕ <strong>Add</strong> new character names if needed</li>
+                        </ul>
+                    </div>
+                    <div class="line-review-controls">
+                        <button class="btn btn-secondary" id="selectAllLinesBtn">Select All</button>
+                        <button class="btn btn-secondary" id="deselectAllLinesBtn">Deselect All</button>
+                        <button class="btn btn-secondary" id="removeSelectedLinesBtn">Remove Selected</button>
+                    </div>
+                    <div class="character-lines-container" id="characterLinesContainer">
+                        <!-- Character lines will be populated here -->
+                    </div>
+                    <div class="review-actions">
+                        <button class="btn btn-primary" id="proceedToCharacterSetupBtn">Proceed to Character Setup</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 3: Character Selection -->
             <section id="character-section" class="step-section">
                 <div class="step-header">
-                    <h2>Step 2: Character Setup</h2>
-                    <div class="step-number">2</div>
+                    <h2>Step 3: Character Setup</h2>
+                    <div class="step-number">3</div>
                 </div>
                 <div class="character-setup">
                     <div class="character-group">
@@ -66,11 +99,11 @@
                 <button class="btn btn-primary" id="startRecordingBtn" disabled>Start Recording Session</button>
             </section>
 
-            <!-- Step 3: Recording Interface -->
+            <!-- Step 4: Recording Interface -->
             <section id="recording-section" class="step-section">
                 <div class="step-header">
-                    <h2>Step 3: Record Character Voices</h2>
-                    <div class="step-number">3</div>
+                    <h2>Step 4: Record Character Voices</h2>
+                    <div class="step-number">4</div>
                 </div>
                 <div class="recording-interface">
                     <div class="current-character">
@@ -122,7 +155,10 @@
                                 <div class="progress-fill" id="progressFill"></div>
                             </div>
                         </div>
-                        <div class="teleprompter-text" id="teleprompterText"></div>
+                        <div class="teleprompter-container">
+                            <div class="teleprompter-document" id="teleprompterDocument"></div>
+                            <div class="teleprompter-current-line" id="teleprompterCurrentLine"></div>
+                        </div>
                         <div class="teleprompter-controls">
                             <button class="btn btn-secondary" id="prevLineBtn">← Previous</button>
                             <button class="btn btn-secondary" id="nextLineBtn">Next →</button>
@@ -132,11 +168,11 @@
                 <button class="btn btn-primary" id="finishRecordingBtn">Finish Recording Session</button>
             </section>
 
-            <!-- Step 4: Auto-Advance Mode -->
+            <!-- Step 5: Auto-Advance Mode -->
             <section id="playback-section" class="step-section">
                 <div class="step-header">
-                    <h2>Step 4: Auto-Advance Production</h2>
-                    <div class="step-number">4</div>
+                    <h2>Step 5: Auto-Advance Production</h2>
+                    <div class="step-number">5</div>
                 </div>
                 <div class="playback-interface">
                     <div class="mode-selector">
@@ -152,6 +188,29 @@
                             </label>
                         </div>
                     </div>
+                    <div class="timeout-config">
+                        <h3>Speech Timeout Settings</h3>
+                        <p>Configure how long to wait before auto-advancing to the next line</p>
+                        <div class="timeout-controls">
+                            <label for="timeoutDuration">Timeout Duration:</label>
+                            <select id="timeoutDuration">
+                                <option value="30000">30 seconds</option>
+                                <option value="60000">1 minute</option>
+                                <option value="120000" selected>2 minutes</option>
+                                <option value="180000">3 minutes</option>
+                                <option value="300000">5 minutes</option>
+                                <option value="custom">Custom...</option>
+                            </select>
+                            <div class="custom-timeout" id="customTimeoutInput" style="display: none;">
+                                <input type="number" id="customTimeoutValue" min="10" max="600" placeholder="Enter seconds">
+                                <span>seconds</span>
+                                <button class="btn btn-secondary" id="applyCustomTimeout">Apply</button>
+                            </div>
+                        </div>
+                        <div class="timeout-info">
+                            <p>Current timeout: <strong id="currentTimeoutDisplay">2 minutes</strong></p>
+                        </div>
+                    </div>
                     <div class="production-controls">
                         <button class="btn btn-primary" id="startProductionBtn">🎬 Start Production</button>
                         <button class="btn btn-secondary" id="pauseProductionBtn" disabled>⏸️ Pause</button>
@@ -164,7 +223,10 @@
                                 <span id="statusText">Ready to start</span>
                             </div>
                         </div>
-                        <div class="teleprompter-text" id="productionTeleprompterText"></div>
+                        <div class="teleprompter-container">
+                            <div class="teleprompter-document" id="productionTeleprompterDocument"></div>
+                            <div class="teleprompter-current-line" id="productionTeleprompterCurrentLine"></div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -177,6 +239,21 @@
 
         <!-- Status Messages -->
         <div class="status-message" id="statusMessage"></div>
+    </div>
+
+    <!-- Character Reassignment Modal -->
+    <div class="character-reassign-modal" id="characterReassignModal">
+        <div class="character-reassign-content">
+            <h3>Reassign Dialogue Line</h3>
+            <p id="reassignDialogueText"></p>
+            <div class="character-reassign-options" id="reassignOptions">
+                <!-- Options will be populated here -->
+            </div>
+            <div class="character-reassign-actions">
+                <button class="btn btn-secondary" id="cancelReassignBtn">Cancel</button>
+                <button class="btn btn-primary" id="confirmReassignBtn">Reassign</button>
+            </div>
+        </div>
     </div>
 
     <!-- Scripts -->

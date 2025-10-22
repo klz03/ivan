@@ -3,6 +3,7 @@ class AppState {
     constructor() {
         this.scriptText = '';
         this.dialogueLines = [];
+        this.scriptLines = []; // Full document lines with metadata
         this.characters = new Set();
         this.recordCharacters = new Set();
         this.speakCharacters = new Set();
@@ -20,11 +21,13 @@ class AppState {
         this.audioProcessor = null;
         this.currentAudio = null; // Track currently playing audio
         this.isPaused = false;
+        this.speechTimeoutDuration = 120000; // Default 2 minutes in milliseconds
     }
 
     reset() {
         this.scriptText = '';
         this.dialogueLines = [];
+        this.scriptLines = [];
         this.characters.clear();
         this.recordCharacters.clear();
         this.speakCharacters.clear();
@@ -52,6 +55,7 @@ function initializeApp() {
     setupEventListeners();
     setupSpeechRecognition();
     setupAudioVisualizer();
+    setupMobileOptimizations();
 }
 
 function setupEventListeners() {
@@ -65,6 +69,16 @@ function setupEventListeners() {
     uploadArea.addEventListener('dragleave', handleDragLeave);
     uploadArea.addEventListener('drop', handleFileDrop);
     processScriptBtn.addEventListener('click', processScript);
+
+    // Character Line Review
+    document.getElementById('selectAllLinesBtn').addEventListener('click', selectAllLines);
+    document.getElementById('deselectAllLinesBtn').addEventListener('click', deselectAllLines);
+    document.getElementById('removeSelectedLinesBtn').addEventListener('click', removeSelectedLines);
+    document.getElementById('proceedToCharacterSetupBtn').addEventListener('click', proceedToCharacterSetup);
+    
+    // Character Reassignment Modal
+    document.getElementById('cancelReassignBtn').addEventListener('click', cancelReassign);
+    document.getElementById('confirmReassignBtn').addEventListener('click', confirmReassign);
 
     // Character Selection
     document.getElementById('startRecordingBtn').addEventListener('click', startRecordingSession);
@@ -82,6 +96,94 @@ function setupEventListeners() {
     document.getElementById('startProductionBtn').addEventListener('click', startProduction);
     document.getElementById('pauseProductionBtn').addEventListener('click', pauseProduction);
     document.getElementById('stopProductionBtn').addEventListener('click', stopProduction);
+    
+    // Timeout Configuration
+    document.getElementById('timeoutDuration').addEventListener('change', handleTimeoutChange);
+    document.getElementById('applyCustomTimeout').addEventListener('click', applyCustomTimeout);
+}
+
+function setupMobileOptimizations() {
+    // Detect mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    if (isMobile || isTouchDevice) {
+        // Add mobile-specific classes
+        document.body.classList.add('mobile-device');
+        
+        // Optimize for mobile audio recording
+        setupMobileAudioRecording();
+        
+        // Add touch-friendly interactions
+        setupTouchOptimizations();
+        
+        // Handle mobile-specific UI adjustments
+        setupMobileUI();
+        
+        console.log('Mobile optimizations enabled');
+    }
+}
+
+function setupMobileAudioRecording() {
+    // Mobile browsers often require user interaction before audio recording
+    // Add a prompt for microphone permission on mobile
+    const recordBtn = document.getElementById('recordBtn');
+    if (recordBtn) {
+        recordBtn.addEventListener('click', function() {
+            // On mobile, we need to ensure audio context is created after user interaction
+            if (appState.audioContext && appState.audioContext.state === 'suspended') {
+                appState.audioContext.resume().then(() => {
+                    console.log('Audio context resumed for mobile');
+                });
+            }
+        });
+    }
+}
+
+function setupTouchOptimizations() {
+    // Add touch-friendly hover effects
+    const buttons = document.querySelectorAll('.btn');
+    buttons.forEach(button => {
+        button.addEventListener('touchstart', function() {
+            this.classList.add('touch-active');
+        });
+        
+        button.addEventListener('touchend', function() {
+            setTimeout(() => {
+                this.classList.remove('touch-active');
+            }, 150);
+        });
+    });
+    
+    // Optimize touch targets for mobile
+    const touchTargets = document.querySelectorAll('input[type="checkbox"], input[type="radio"], .character-item, .dialogue-line-item');
+    touchTargets.forEach(target => {
+        target.style.minHeight = '44px';
+        target.style.minWidth = '44px';
+    });
+}
+
+function setupMobileUI() {
+    // Adjust UI elements for mobile
+    const appContainer = document.querySelector('.app-container');
+    if (appContainer) {
+        // Add mobile-specific padding
+        appContainer.style.padding = '10px';
+    }
+    
+    // Optimize teleprompter for mobile reading
+    const teleprompterText = document.querySelectorAll('.teleprompter-text, .teleprompter-current-line');
+    teleprompterText.forEach(element => {
+        element.style.lineHeight = '1.6';
+        element.style.fontSize = '1.1rem';
+    });
+    
+    // Make status messages more prominent on mobile
+    const statusMessage = document.getElementById('statusMessage');
+    if (statusMessage) {
+        statusMessage.style.fontSize = '1rem';
+        statusMessage.style.padding = '15px 20px';
+    }
 }
 
 function setupSpeechRecognition() {
@@ -144,16 +246,16 @@ function setupSpeechRecognition() {
             console.log('Speech recognition ended');
             // Restart recognition if we're in production mode and waiting for live speech
             if (appState.isProductionMode && appState.speakCharacters.has(appState.dialogueLines[appState.productionLineIndex]?.character)) {
-                // Set a timeout to auto-advance if no speech is detected for 30 seconds
+                // Set a timeout to auto-advance if no speech is detected
                 if (appState.speechTimeout) {
                     clearTimeout(appState.speechTimeout);
                 }
                 appState.speechTimeout = setTimeout(() => {
                     if (appState.isProductionMode && appState.speakCharacters.has(appState.dialogueLines[appState.productionLineIndex]?.character)) {
-                        console.log('Auto-advancing due to speech timeout (30 seconds)');
+                        console.log(`Auto-advancing due to speech timeout (${appState.speechTimeoutDuration / 1000} seconds)`);
                         advanceProductionLine();
                     }
-                }, 30000);
+                }, appState.speechTimeoutDuration);
                 
                 setTimeout(() => {
                     if (appState.isProductionMode && appState.recognition.state !== 'started') {
@@ -272,16 +374,18 @@ async function processScript() {
         console.log('Processing script file:', file.name);
         console.log('File type:', file.name.toLowerCase().endsWith('.fountain') ? 'Fountain' : 'Text');
         console.log('First 500 characters:', text.substring(0, 500));
+        console.log('Total file length:', text.length, 'characters');
         
         const processedData = parseDialogue(text, file.name);
         
         appState.dialogueLines = processedData.lines;
+        appState.scriptLines = processedData.scriptLines;
         appState.characters = processedData.characters;
         
         console.log('Parsed', appState.dialogueLines.length, 'dialogue lines');
         console.log('Found characters:', Array.from(appState.characters));
         
-        showCharacterSelection();
+        showCharacterLineReview();
         showStatusMessage('Script processed successfully', 'success');
         
     } catch (error) {
@@ -293,6 +397,7 @@ async function processScript() {
 function parseDialogue(text, fileName) {
     const lines = [];
     const characters = new Set();
+    const scriptLines = [];
     
     // Split text into lines
     const textLines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
@@ -307,22 +412,29 @@ function parseDialogue(text, fileName) {
     
     for (let i = 0; i < textLines.length; i++) {
         const line = textLines[i];
+        let lineType = 'non-dialogue';
+        let character = '';
+        let isDialogueLine = false;
         
-        // Skip scene headings, action lines, and other non-dialogue elements
-        if (isSceneHeading(line) || isActionLine(line) || isCharacterDescription(line)) {
-            currentCharacter = '';
-            continue;
-        }
-        
-        // Check if this line is a character name (standalone, typically in ALL CAPS)
-        if (isCharacterName(line)) {
+        // Determine line type and extract character if applicable
+        if (isSceneHeading(line)) {
+            lineType = 'scene-heading';
+            currentCharacter = ''; // Reset character when we hit a scene heading
+        } else if (isActionLine(line)) {
+            lineType = 'action-line';
+            // Don't reset character for action lines as they might be between character and dialogue
+        } else if (isCharacterDescription(line)) {
+            lineType = 'character-description';
+            currentCharacter = ''; // Reset character for descriptions
+        } else if (isCharacterName(line)) {
+            lineType = 'character-name';
             currentCharacter = line.trim();
+            character = currentCharacter;
             console.log('Found character name:', currentCharacter);
-            continue;
-        }
-        
-        // If we have a character and this line looks like dialogue
-        if (currentCharacter && isDialogue(line)) {
+        } else if (currentCharacter && isDialogue(line)) {
+            lineType = 'dialogue-line';
+            character = currentCharacter;
+            isDialogueLine = true;
             console.log('Found character:', currentCharacter, 'with dialogue:', line.substring(0, 50) + '...');
             
             characters.add(currentCharacter);
@@ -331,13 +443,49 @@ function parseDialogue(text, fileName) {
                 character: currentCharacter,
                 dialogue: line
             });
+        } else if (currentCharacter && line.trim().length > 0) {
+            // If we have a current character and this line isn't empty, 
+            // it might be dialogue that wasn't caught by the strict dialogue detection
+            // Let's be more lenient for lines that follow character names
+            console.log('Potential missed dialogue for', currentCharacter, ':', line.substring(0, 50) + '...');
+            
+            // Check if it looks like dialogue with a more lenient approach
+            const looksLikeDialogue = line.length > 1 && 
+                                    !isSceneHeading(line) && 
+                                    !isActionLine(line) && 
+                                    !isCharacterName(line) &&
+                                    (line.includes(' ') || line.includes('?') || line.includes('!') || line.includes('.'));
+            
+            if (looksLikeDialogue) {
+                lineType = 'dialogue-line';
+                character = currentCharacter;
+                isDialogueLine = true;
+                console.log('Recovered dialogue for', currentCharacter, ':', line.substring(0, 50) + '...');
+            
+            characters.add(currentCharacter);
+            lines.push({
+                number: lineNumber++,
+                character: currentCharacter,
+                dialogue: line
+            });
         }
+        }
+        
+        // Add to script lines with metadata
+        scriptLines.push({
+            text: line,
+            type: lineType,
+            character: character,
+            isDialogue: isDialogueLine,
+            lineNumber: isDialogueLine ? lineNumber - 1 : null,
+            originalIndex: i
+        });
     }
     
     console.log('Parsed', lines.length, 'dialogue lines from', characters.size, 'characters');
     console.log('Characters found:', Array.from(characters));
     
-    return { lines, characters };
+    return { lines, characters, scriptLines };
 }
 
 function isSceneHeading(line) {
@@ -408,7 +556,7 @@ function isDialogue(line) {
         return false;
     }
     
-    // Filter out stage directions and action descriptions
+    // Filter out obvious stage directions and action descriptions
     const stageDirectionWords = ['considers', 'eyes', 'light', 'up', 'places', 'sits', 'approaches', 'looks', 'turns', 'takes', 'rushes', 'enjoy', 'typing', 'laptop', 'fade', 'end', 'continues', 'moves', 'walks', 'stands', 'enters', 'exits'];
     const isStageDirection = stageDirectionWords.some(word => line.toLowerCase().includes(word)) && 
                            (line.includes('s') && line.toLowerCase().includes('s')) || // Contains 's for possessive
@@ -421,25 +569,46 @@ function isDialogue(line) {
         return false;
     }
     
-    // Filter out ALL CAPS lines that are likely stage directions
-    if (/^[A-Z\s]+$/.test(line) && line.length > 3) {
+    // Filter out ALL CAPS lines that are likely stage directions (but allow short ones)
+    if (/^[A-Z\s]+$/.test(line) && line.length > 10) {
         return false;
     }
     
-    // Check if it looks like dialogue (mixed case, contains common dialogue words)
-    const dialogueWords = ['I', 'you', 'the', 'a', 'an', 'and', 'or', 'but', 'thanks', 'hey', 'hello', 'yes', 'no', 'well', 'okay', 'sure', 'really', 'what', 'how', 'why', 'when', 'where'];
-    const hasDialogueWords = dialogueWords.some(word => line.toLowerCase().includes(word.toLowerCase()));
-    
-    // Not ALL CAPS (unless it's short and might be shouting)
-    const notAllCaps = !/^[A-Z\s]+$/.test(line) || line.length < 10;
-    
-    // Must contain common dialogue patterns
+    // More comprehensive dialogue detection
+    // Check for common dialogue patterns
     const hasDialoguePatterns = line.includes('?') || line.includes('!') || line.includes('.') || 
                                line.toLowerCase().includes('i ') || line.toLowerCase().includes('you ') ||
                                line.toLowerCase().includes('the ') || line.toLowerCase().includes('a ') ||
-                               line.toLowerCase().includes('an ') || line.toLowerCase().includes('and ');
+                               line.toLowerCase().includes('an ') || line.toLowerCase().includes('and ') ||
+                               line.toLowerCase().includes('i\'') || line.toLowerCase().includes('you\'') ||
+                               line.toLowerCase().includes('that\'s') || line.toLowerCase().includes('it\'s') ||
+                               line.toLowerCase().includes('what') || line.toLowerCase().includes('how') ||
+                               line.toLowerCase().includes('why') || line.toLowerCase().includes('when') ||
+                               line.toLowerCase().includes('where') || line.toLowerCase().includes('thanks') ||
+                               line.toLowerCase().includes('hey') || line.toLowerCase().includes('hello') ||
+                               line.toLowerCase().includes('yes') || line.toLowerCase().includes('no') ||
+                               line.toLowerCase().includes('well') || line.toLowerCase().includes('okay') ||
+                               line.toLowerCase().includes('sure') || line.toLowerCase().includes('really') ||
+                               line.toLowerCase().includes('definitely') || line.toLowerCase().includes('absolutely') ||
+                               line.toLowerCase().includes('exactly') || line.toLowerCase().includes('probably') ||
+                               line.toLowerCase().includes('maybe') || line.toLowerCase().includes('perhaps') ||
+                               line.toLowerCase().includes('definitely') || line.toLowerCase().includes('certainly');
     
-    return hasDialogueWords && notAllCaps && hasDialoguePatterns && line.length > 0;
+    // Not ALL CAPS (unless it's short and might be shouting)
+    const notAllCaps = !/^[A-Z\s]+$/.test(line) || line.length < 15;
+    
+    // Must be a reasonable length for dialogue
+    const reasonableLength = line.length > 2 && line.length < 200;
+    
+    // Check for common dialogue starters
+    const dialogueStarters = ['i ', 'you ', 'the ', 'a ', 'an ', 'and ', 'but ', 'so ', 'well ', 'oh ', 'ah ', 'um ', 'hmm ', 'wow ', 'hey ', 'hi ', 'hello ', 'thanks ', 'thank you', 'sorry ', 'excuse me', 'pardon me'];
+    const startsWithDialogue = dialogueStarters.some(starter => line.toLowerCase().startsWith(starter));
+    
+    // Check for common dialogue words anywhere in the line
+    const dialogueWords = ['i', 'you', 'the', 'a', 'an', 'and', 'or', 'but', 'thanks', 'hey', 'hello', 'yes', 'no', 'well', 'okay', 'sure', 'really', 'what', 'how', 'why', 'when', 'where', 'that', 'this', 'there', 'here', 'me', 'my', 'your', 'our', 'their', 'his', 'her', 'him', 'her', 'us', 'we', 'they', 'them', 'it', 'its', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'can', 'may', 'might', 'must', 'shall', 'am', 'are', 'is', 'was', 'were'];
+    const hasDialogueWords = dialogueWords.some(word => line.toLowerCase().includes(word));
+    
+    return hasDialoguePatterns && notAllCaps && reasonableLength && (startsWithDialogue || hasDialogueWords) && line.length > 0;
 }
 
 function parseFountainLine(line) {
@@ -520,6 +689,310 @@ function parseTextLine(line) {
     }
     
     return { character: '', dialogue: '' };
+}
+
+// Character Line Review Functions
+function showCharacterLineReview() {
+    console.log('Showing character line review for', appState.dialogueLines.length, 'dialogue lines');
+    
+    const container = document.getElementById('characterLinesContainer');
+    container.innerHTML = '';
+    
+    if (appState.dialogueLines.length === 0) {
+        container.innerHTML = '<p style="color: #666; font-style: italic; text-align: center; padding: 20px;">No dialogue lines found. Make sure your script has dialogue in one of these formats:<br>• "CHARACTER: dialogue"<br>• "Character Name: dialogue"<br>• "(Character) dialogue"<br>• "CHARACTER - dialogue"</p>';
+        return;
+    }
+    
+    // Group dialogue lines by character
+    const characterGroups = {};
+    appState.dialogueLines.forEach(line => {
+        if (!characterGroups[line.character]) {
+            characterGroups[line.character] = [];
+        }
+        characterGroups[line.character].push(line);
+    });
+    
+    // Create UI for each character group
+    Object.keys(characterGroups).forEach(character => {
+        const group = createCharacterLineGroup(character, characterGroups[character]);
+        container.appendChild(group);
+    });
+    
+    showSection('character-line-review-section');
+}
+
+function createCharacterLineGroup(character, lines) {
+    const group = document.createElement('div');
+    group.className = 'character-lines-group';
+    
+    const header = document.createElement('h4');
+    header.innerHTML = `${character} <span class="character-count">${lines.length} lines</span>`;
+    
+    const linesList = document.createElement('div');
+    linesList.className = 'dialogue-lines-list';
+    
+    lines.forEach((line, index) => {
+        const lineItem = createDialogueLineItem(line, character, index);
+        linesList.appendChild(lineItem);
+    });
+    
+    group.appendChild(header);
+    group.appendChild(linesList);
+    
+    return group;
+}
+
+function createDialogueLineItem(line, character, index) {
+    const item = document.createElement('div');
+    item.className = 'dialogue-line-item';
+    item.dataset.lineNumber = line.number;
+    item.dataset.character = character;
+    item.dataset.index = index;
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'dialogue-line-checkbox';
+    checkbox.addEventListener('change', handleLineSelection);
+    
+    const content = document.createElement('div');
+    content.className = 'dialogue-line-content';
+    
+    const text = document.createElement('div');
+    text.className = 'dialogue-line-text';
+    text.textContent = line.dialogue;
+    
+    const meta = document.createElement('div');
+    meta.className = 'dialogue-line-meta';
+    meta.innerHTML = `
+        <span>Line ${line.number}</span>
+        <span>Character: ${character}</span>
+    `;
+    
+    const actions = document.createElement('div');
+    actions.className = 'dialogue-line-actions';
+    
+    const reassignBtn = document.createElement('button');
+    reassignBtn.textContent = 'Reassign';
+    reassignBtn.className = 'reassign-btn';
+    reassignBtn.addEventListener('click', () => showReassignModal(line, character));
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Remove';
+    removeBtn.className = 'remove-btn';
+    removeBtn.addEventListener('click', () => removeDialogueLine(line.number));
+    
+    actions.appendChild(reassignBtn);
+    actions.appendChild(removeBtn);
+    
+    content.appendChild(text);
+    content.appendChild(meta);
+    
+    item.appendChild(checkbox);
+    item.appendChild(content);
+    item.appendChild(actions);
+    
+    return item;
+}
+
+function handleLineSelection(e) {
+    const item = e.target.closest('.dialogue-line-item');
+    if (e.target.checked) {
+        item.classList.add('selected');
+    } else {
+        item.classList.remove('selected');
+    }
+}
+
+function selectAllLines() {
+    document.querySelectorAll('.dialogue-line-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+        checkbox.closest('.dialogue-line-item').classList.add('selected');
+    });
+}
+
+function deselectAllLines() {
+    document.querySelectorAll('.dialogue-line-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+        checkbox.closest('.dialogue-line-item').classList.remove('selected');
+    });
+}
+
+function removeSelectedLines() {
+    const selectedItems = document.querySelectorAll('.dialogue-line-item.selected');
+    const lineNumbers = Array.from(selectedItems).map(item => parseInt(item.dataset.lineNumber));
+    
+    if (lineNumbers.length === 0) {
+        showStatusMessage('No lines selected for removal', 'error');
+        return;
+    }
+    
+    // Remove from dialogue lines array
+    appState.dialogueLines = appState.dialogueLines.filter(line => !lineNumbers.includes(line.number));
+    
+    // Remove from script lines array
+    appState.scriptLines = appState.scriptLines.filter(scriptLine => 
+        !scriptLine.isDialogue || !lineNumbers.includes(scriptLine.lineNumber)
+    );
+    
+    // Re-render the review interface
+    showCharacterLineReview();
+    showStatusMessage(`Removed ${lineNumbers.length} dialogue lines`, 'success');
+}
+
+function removeDialogueLine(lineNumber) {
+    // Remove from dialogue lines array
+    appState.dialogueLines = appState.dialogueLines.filter(line => line.number !== lineNumber);
+    
+    // Remove from script lines array
+    appState.scriptLines = appState.scriptLines.filter(scriptLine => 
+        !scriptLine.isDialogue || scriptLine.lineNumber !== lineNumber
+    );
+    
+    // Re-render the review interface
+    showCharacterLineReview();
+    showStatusMessage('Dialogue line removed', 'success');
+}
+
+function showReassignModal(line, currentCharacter) {
+    const modal = document.getElementById('characterReassignModal');
+    const dialogueText = document.getElementById('reassignDialogueText');
+    const optionsContainer = document.getElementById('reassignOptions');
+    
+    dialogueText.textContent = line.dialogue;
+    
+    // Clear existing options
+    optionsContainer.innerHTML = '';
+    
+    // Get all unique characters from the script
+    const allCharacters = Array.from(appState.characters);
+    
+    // Add option to keep current character
+    const currentOption = createReassignOption(currentCharacter, currentCharacter, true);
+    optionsContainer.appendChild(currentOption);
+    
+    // Add options for other characters
+    allCharacters.forEach(character => {
+        if (character !== currentCharacter) {
+            const option = createReassignOption(character, character, false);
+            optionsContainer.appendChild(option);
+        }
+    });
+    
+    // Add option to create new character
+    const newCharacterOption = createReassignOption('Create New Character', 'NEW_CHARACTER', false);
+    optionsContainer.appendChild(newCharacterOption);
+    
+    // Store current line for reassignment
+    modal.dataset.lineNumber = line.number;
+    modal.dataset.currentCharacter = currentCharacter;
+    
+    modal.classList.add('show');
+}
+
+function createReassignOption(label, value, isSelected) {
+    const option = document.createElement('div');
+    option.className = 'character-reassign-option';
+    if (isSelected) option.classList.add('selected');
+    
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'reassignCharacter';
+    radio.value = value;
+    radio.checked = isSelected;
+    radio.addEventListener('change', () => {
+        document.querySelectorAll('.character-reassign-option').forEach(opt => opt.classList.remove('selected'));
+        option.classList.add('selected');
+    });
+    
+    const labelElement = document.createElement('label');
+    labelElement.textContent = label;
+    labelElement.style.cursor = 'pointer';
+    labelElement.addEventListener('click', () => {
+        radio.checked = true;
+        document.querySelectorAll('.character-reassign-option').forEach(opt => opt.classList.remove('selected'));
+        option.classList.add('selected');
+    });
+    
+    option.appendChild(radio);
+    option.appendChild(labelElement);
+    
+    return option;
+}
+
+function cancelReassign() {
+    const modal = document.getElementById('characterReassignModal');
+    modal.classList.remove('show');
+}
+
+function confirmReassign() {
+    const modal = document.getElementById('characterReassignModal');
+    const selectedOption = document.querySelector('.character-reassign-option.selected input[type="radio"]');
+    const lineNumber = parseInt(modal.dataset.lineNumber);
+    const currentCharacter = modal.dataset.currentCharacter;
+    
+    if (!selectedOption) {
+        showStatusMessage('Please select a character', 'error');
+        return;
+    }
+    
+    const newCharacter = selectedOption.value;
+    
+    if (newCharacter === 'NEW_CHARACTER') {
+        const newCharacterName = prompt('Enter the new character name:');
+        if (!newCharacterName || newCharacterName.trim() === '') {
+            showStatusMessage('Character name cannot be empty', 'error');
+            return;
+        }
+        
+        // Add new character to characters set
+        appState.characters.add(newCharacterName.trim());
+        
+        // Update the dialogue line
+        const lineIndex = appState.dialogueLines.findIndex(line => line.number === lineNumber);
+        if (lineIndex !== -1) {
+            appState.dialogueLines[lineIndex].character = newCharacterName.trim();
+        }
+        
+        // Update script lines
+        appState.scriptLines.forEach(scriptLine => {
+            if (scriptLine.isDialogue && scriptLine.lineNumber === lineNumber) {
+                scriptLine.character = newCharacterName.trim();
+            }
+        });
+        
+        showStatusMessage(`Line reassigned to new character: ${newCharacterName.trim()}`, 'success');
+    } else {
+        // Update the dialogue line
+        const lineIndex = appState.dialogueLines.findIndex(line => line.number === lineNumber);
+        if (lineIndex !== -1) {
+            appState.dialogueLines[lineIndex].character = newCharacter;
+        }
+        
+        // Update script lines
+        appState.scriptLines.forEach(scriptLine => {
+            if (scriptLine.isDialogue && scriptLine.lineNumber === lineNumber) {
+                scriptLine.character = newCharacter;
+            }
+        });
+        
+        showStatusMessage(`Line reassigned from ${currentCharacter} to ${newCharacter}`, 'success');
+    }
+    
+    modal.classList.remove('show');
+    
+    // Re-render the review interface
+    showCharacterLineReview();
+}
+
+function proceedToCharacterSetup() {
+    // Update characters set based on remaining dialogue lines
+    const remainingCharacters = new Set();
+    appState.dialogueLines.forEach(line => {
+        remainingCharacters.add(line.character);
+    });
+    appState.characters = remainingCharacters;
+    
+    showCharacterSelection();
 }
 
 // Character Selection Functions
@@ -632,8 +1105,21 @@ function updateRecordingInterface() {
     
     const currentLine = characterLines[appState.currentLineIndex];
     
+    if (!currentLine) {
+        console.error('No current line found at index:', appState.currentLineIndex);
+        return;
+    }
+    
     document.getElementById('currentLineNumber').textContent = currentLine.number;
-    document.getElementById('teleprompterText').textContent = currentLine.dialogue;
+    
+    // Update the full document teleprompter
+    try {
+        renderFullDocumentTeleprompter('teleprompterDocument', 'teleprompterCurrentLine', currentLine);
+    } catch (error) {
+        console.error('Error rendering teleprompter:', error);
+        // Fallback to simple text display
+        document.getElementById('teleprompterCurrentLine').textContent = currentLine.dialogue;
+    }
     
     // Check if this line has been recorded
     const hasRecording = appState.audioRecordings.get(appState.currentCharacter)?.has(currentLine.number);
@@ -642,13 +1128,9 @@ function updateRecordingInterface() {
     if (hasRecording) {
         rerecordBtn.textContent = '🔄 Rerecord Line';
         rerecordBtn.style.background = 'linear-gradient(135deg, #4299e1, #3182ce)';
-        document.getElementById('teleprompterText').style.border = '2px solid #38b2ac';
-        document.getElementById('teleprompterText').style.backgroundColor = '#f0f9ff';
     } else {
         rerecordBtn.textContent = '📝 Record Line';
         rerecordBtn.style.background = 'linear-gradient(135deg, #718096, #4a5568)';
-        document.getElementById('teleprompterText').style.border = '2px solid #e2e8f0';
-        document.getElementById('teleprompterText').style.backgroundColor = '#1a202c';
     }
     
     // Update progress
@@ -1295,6 +1777,51 @@ function finishRecordingSession() {
     showSection('playback-section');
 }
 
+// Timeout Configuration Functions
+function handleTimeoutChange(e) {
+    const value = e.target.value;
+    const customInput = document.getElementById('customTimeoutInput');
+    
+    if (value === 'custom') {
+        customInput.style.display = 'flex';
+    } else {
+        customInput.style.display = 'none';
+        appState.speechTimeoutDuration = parseInt(value);
+        updateTimeoutDisplay();
+        showStatusMessage('Timeout duration updated', 'success');
+    }
+}
+
+function applyCustomTimeout() {
+    const customValue = document.getElementById('customTimeoutValue').value;
+    
+    if (!customValue || customValue < 10 || customValue > 600) {
+        showStatusMessage('Please enter a value between 10 and 600 seconds', 'error');
+        return;
+    }
+    
+    appState.speechTimeoutDuration = parseInt(customValue) * 1000;
+    updateTimeoutDisplay();
+    showStatusMessage(`Custom timeout set to ${customValue} seconds`, 'success');
+}
+
+function updateTimeoutDisplay() {
+    const displayElement = document.getElementById('currentTimeoutDisplay');
+    const seconds = appState.speechTimeoutDuration / 1000;
+    
+    if (seconds < 60) {
+        displayElement.textContent = `${seconds} seconds`;
+    } else {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        if (remainingSeconds === 0) {
+            displayElement.textContent = `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+        } else {
+            displayElement.textContent = `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ${remainingSeconds} seconds`;
+        }
+    }
+}
+
 // Production Functions
 function startProduction() {
     appState.isProductionMode = true;
@@ -1369,89 +1896,6 @@ function stopProduction() {
     showStatusMessage('Production stopped', 'info');
 }
 
-function updateProductionInterface() {
-    console.log('updateProductionInterface called:', {
-        productionLineIndex: appState.productionLineIndex,
-        dialogueLinesLength: appState.dialogueLines.length,
-        shouldStop: appState.productionLineIndex >= appState.dialogueLines.length
-    });
-    
-    if (appState.productionLineIndex >= appState.dialogueLines.length) {
-        // Production completed - stop everything
-        appState.isProductionMode = false;
-        
-        // Stop speech recognition
-        if (appState.recognition) {
-            appState.recognition.stop();
-        }
-        
-        // Clear any speech timeout
-        if (appState.speechTimeout) {
-            clearTimeout(appState.speechTimeout);
-            appState.speechTimeout = null;
-        }
-        
-        // Reset button states
-        document.getElementById('startProductionBtn').disabled = false;
-        document.getElementById('pauseProductionBtn').disabled = true;
-        document.getElementById('stopProductionBtn').disabled = true;
-        
-        // Show completion message
-        showStatusMessage('🎬 Production completed! Script finished.', 'success');
-        
-        // Update the interface to show completion
-        document.getElementById('productionLineNumber').textContent = 'Complete';
-        document.getElementById('productionTeleprompterText').textContent = '🎉 Script finished! Production complete.';
-        
-        return;
-    }
-    
-    const currentLine = appState.dialogueLines[appState.productionLineIndex];
-    
-    document.getElementById('productionLineNumber').textContent = currentLine.number;
-    document.getElementById('productionTeleprompterText').textContent = currentLine.dialogue;
-    
-    // Don't process if paused
-    if (appState.isPaused) {
-        return;
-    }
-    
-    const playRecordings = document.getElementById('playRecordings').checked;
-    const liveSpeaking = document.getElementById('liveSpeaking').checked;
-    
-    if (playRecordings && appState.recordCharacters.has(currentLine.character)) {
-        // Play recorded audio
-        console.log('Looking for recording for', currentLine.character, 'line', currentLine.number);
-        console.log('Available recordings for', currentLine.character, ':', 
-            appState.audioRecordings.get(currentLine.character) ? 
-            Array.from(appState.audioRecordings.get(currentLine.character).keys()) : 'none');
-        
-        const audioBlob = appState.audioRecordings.get(currentLine.character)?.get(currentLine.number);
-        if (audioBlob) {
-            console.log('Playing recorded audio for', currentLine.character, 'line', currentLine.number);
-            playAudioBlob(audioBlob);
-            document.getElementById('statusText').textContent = 'Playing recorded audio';
-        } else {
-            console.log('No recording found for', currentLine.character, 'line', currentLine.number);
-            document.getElementById('statusText').textContent = 'No recording found for this line';
-            advanceProductionLine();
-        }
-    } else if (liveSpeaking && appState.speakCharacters.has(currentLine.character)) {
-        // Wait for live speaking
-        document.getElementById('statusText').textContent = 'Waiting for live speech...';
-        if (appState.recognition && appState.recognition.state !== 'started' && !appState.isPaused) {
-            try {
-                appState.recognition.start();
-            } catch (error) {
-                console.log('Speech recognition already started, skipping');
-            }
-        }
-    } else {
-        // Skip this line
-        document.getElementById('statusText').textContent = 'Skipping line';
-        advanceProductionLine();
-    }
-}
 
 function advanceProductionLine() {
     // Stop speech recognition before advancing
@@ -1493,6 +1937,172 @@ function playAudioBlob(audioBlob) {
     
     if (!appState.isPaused) {
         audio.play();
+    }
+}
+
+// Full Document Teleprompter Functions
+function renderFullDocumentTeleprompter(documentId, currentLineId, currentLine) {
+    const documentElement = document.getElementById(documentId);
+    const currentLineElement = document.getElementById(currentLineId);
+    
+    if (!documentElement || !currentLineElement) {
+        console.error('Teleprompter elements not found:', { documentId, currentLineId });
+        console.error('Available elements:', {
+            documentElement: !!documentElement,
+            currentLineElement: !!currentLineElement
+        });
+        return;
+    }
+    
+    if (!appState.scriptLines || appState.scriptLines.length === 0) {
+        console.error('No script lines available to render');
+        return;
+    }
+    
+    if (!currentLine) {
+        console.error('No current line provided');
+        return;
+    }
+    
+    // Clear previous content
+    documentElement.innerHTML = '';
+    
+    // Render all script lines
+    appState.scriptLines.forEach((scriptLine, index) => {
+        const lineElement = document.createElement('div');
+        lineElement.className = `script-line ${scriptLine.type}`;
+        lineElement.textContent = scriptLine.text;
+        
+        // Add highlighting for dialogue lines
+        if (scriptLine.isDialogue) {
+            lineElement.classList.add('dialogue-line');
+            
+            // Highlight if this is the current character's line
+            if (scriptLine.character === appState.currentCharacter) {
+                lineElement.classList.add('highlighted');
+                
+                // Mark as current if it's the exact current line
+                if (scriptLine.lineNumber === currentLine.number) {
+                    lineElement.classList.add('current');
+                }
+            }
+        }
+        
+        // Add click handler for dialogue lines
+        if (scriptLine.isDialogue && scriptLine.character === appState.currentCharacter) {
+            lineElement.addEventListener('click', () => {
+                // Find the line index for this character
+                const characterLines = appState.dialogueLines.filter(line => 
+                    line.character === appState.currentCharacter
+                );
+                const lineIndex = characterLines.findIndex(line => line.number === scriptLine.lineNumber);
+                if (lineIndex !== -1) {
+                    appState.currentLineIndex = lineIndex;
+                    updateRecordingInterface();
+                }
+            });
+        }
+        
+        documentElement.appendChild(lineElement);
+    });
+    
+    // Update current line display
+    currentLineElement.textContent = currentLine.dialogue;
+    
+    // Scroll to current line
+    const currentLineElementInDoc = documentElement.querySelector('.script-line.current');
+    if (currentLineElementInDoc) {
+        currentLineElementInDoc.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+        });
+    }
+}
+
+// Production Teleprompter Functions
+function updateProductionInterface() {
+    console.log('updateProductionInterface called:', {
+        productionLineIndex: appState.productionLineIndex,
+        dialogueLinesLength: appState.dialogueLines.length,
+        shouldStop: appState.productionLineIndex >= appState.dialogueLines.length
+    });
+    
+    if (appState.productionLineIndex >= appState.dialogueLines.length) {
+        // Production completed - stop everything
+        appState.isProductionMode = false;
+        
+        // Stop speech recognition
+        if (appState.recognition) {
+            appState.recognition.stop();
+        }
+        
+        // Clear any speech timeout
+        if (appState.speechTimeout) {
+            clearTimeout(appState.speechTimeout);
+            appState.speechTimeout = null;
+        }
+        
+        // Reset button states
+        document.getElementById('startProductionBtn').disabled = false;
+        document.getElementById('pauseProductionBtn').disabled = true;
+        document.getElementById('stopProductionBtn').disabled = true;
+        
+        // Show completion message
+        showStatusMessage('🎬 Production completed! Script finished.', 'success');
+        
+        // Update the interface to show completion
+        document.getElementById('productionLineNumber').textContent = 'Complete';
+        document.getElementById('productionTeleprompterCurrentLine').textContent = '🎉 Script finished! Production complete.';
+        
+        return;
+    }
+    
+    const currentLine = appState.dialogueLines[appState.productionLineIndex];
+    
+    document.getElementById('productionLineNumber').textContent = currentLine.number;
+    
+    // Update the full document teleprompter for production
+    renderFullDocumentTeleprompter('productionTeleprompterDocument', 'productionTeleprompterCurrentLine', currentLine);
+    
+    // Don't process if paused
+    if (appState.isPaused) {
+        return;
+    }
+    
+    const playRecordings = document.getElementById('playRecordings').checked;
+    const liveSpeaking = document.getElementById('liveSpeaking').checked;
+    
+    if (playRecordings && appState.recordCharacters.has(currentLine.character)) {
+        // Play recorded audio
+        console.log('Looking for recording for', currentLine.character, 'line', currentLine.number);
+        console.log('Available recordings for', currentLine.character, ':', 
+            appState.audioRecordings.get(currentLine.character) ? 
+            Array.from(appState.audioRecordings.get(currentLine.character).keys()) : 'none');
+        
+        const audioBlob = appState.audioRecordings.get(currentLine.character)?.get(currentLine.number);
+        if (audioBlob) {
+            console.log('Playing recorded audio for', currentLine.character, 'line', currentLine.number);
+            playAudioBlob(audioBlob);
+            document.getElementById('statusText').textContent = 'Playing recorded audio';
+        } else {
+            console.log('No recording found for', currentLine.character, 'line', currentLine.number);
+            document.getElementById('statusText').textContent = 'No recording found for this line';
+            advanceProductionLine();
+        }
+    } else if (liveSpeaking && appState.speakCharacters.has(currentLine.character)) {
+        // Wait for live speaking
+        document.getElementById('statusText').textContent = 'Waiting for live speech...';
+        if (appState.recognition && appState.recognition.state !== 'started' && !appState.isPaused) {
+            try {
+                appState.recognition.start();
+            } catch (error) {
+                console.log('Speech recognition already started, skipping');
+            }
+        }
+    } else {
+        // Skip this line
+        document.getElementById('statusText').textContent = 'Skipping line';
+        advanceProductionLine();
     }
 }
 
